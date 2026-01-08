@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Misskey MFMエディタ</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        neon: '#CBFF1C',
+                        dark: { bg: '#0A0A0A', surface: '#1A1A1A' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; }
+        
+        /* MFM Animations */
+        @keyframes mfm-shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(2px, 2px) rotate(1deg); }
+            50% { transform: translate(0, 0) rotate(0deg); }
+            75% { transform: translate(-2px, 2px) rotate(-1deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        .mfm-shake { display: inline-block; animation: mfm-shake 0.5s infinite; }
+
+        @keyframes mfm-jelly {
+            0%, 100% { transform: scale(1, 1); }
+            25% { transform: scale(0.9, 1.1); }
+            50% { transform: scale(1.1, 0.9); }
+            75% { transform: scale(0.95, 1.05); }
+        }
+        .mfm-jelly { display: inline-block; animation: mfm-jelly 0.8s infinite; }
+
+        @keyframes mfm-tada {
+            0% { transform: scale(1); }
+            10%, 20% { transform: scale(0.9) rotate(-3deg); }
+            30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); }
+            40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); }
+            100% { transform: scale(1) rotate(0); }
+        }
+        .mfm-tada { display: inline-block; animation: mfm-tada 1s infinite; }
+
+        @keyframes mfm-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .mfm-spin { display: inline-block; animation: mfm-spin 1.5s linear infinite; }
+
+        @keyframes mfm-jump {
+            0%, 100% { transform: translateY(0); }
+            25% { transform: translateY(-10px); }
+            50% { transform: translateY(0); }
+            75% { transform: translateY(-5px); }
+        }
+        .mfm-jump { display: inline-block; animation: mfm-jump 0.8s infinite; }
+
+        @keyframes mfm-rainbow {
+            0% { color: red; } 14% { color: orange; } 28% { color: yellow; } 42% { color: green; }
+            57% { color: blue; } 71% { color: indigo; } 85% { color: violet; } 100% { color: red; }
+        }
+        .mfm-rainbow { animation: mfm-rainbow 3s linear infinite; }
+
+        @keyframes mfm-sparkle {
+            0% { opacity: 1; filter: brightness(100%); }
+            50% { opacity: 0.6; filter: brightness(150%) drop-shadow(0 0 2px gold); }
+            100% { opacity: 1; filter: brightness(100%); }
+        }
+        .mfm-sparkle { animation: mfm-sparkle 0.8s infinite; display: inline-block; }
+        
+        .mfm-blur { filter: blur(6px); transition: filter 0.2s; cursor: pointer; }
+        .mfm-blur:hover { filter: blur(0); }
+
+        .mfm-flip-h { transform: scaleX(-1); display: inline-block; }
+        .mfm-flip-v { transform: scaleY(-1); display: inline-block; }
+        .mfm-flip-hv { transform: scale(-1, -1); display: inline-block; }
+        
+        .mfm-serif { font-family: "Times New Roman", "YuMincho", "Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", serif; }
+        .mfm-x2 { font-size: 150%; } 
+        .mfm-x3 { font-size: 200%; }
+        .mfm-x4 { font-size: 250%; }
+
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-dark-bg text-gray-800 dark:text-gray-100 transition-colors duration-300">
+    <div id="root"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "mfm-js": "https://esm.sh/mfm-js@0.23.0"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import * as Mfm from 'mfm-js';
+
+        // --- Icons (SVG) ---
+        const Icons = {
+            Undo: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M3 7v6h6"}), React.createElement('path', {d:"M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"})),
+            Redo: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M21 7v6h-6"}), React.createElement('path', {d:"M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"})),
+            Moon: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"})),
+            Sun: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('circle', {cx:12, cy:12, r:5}), React.createElement('path', {d:"M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"})),
+            Copy: () => React.createElement('svg', {width:18, height:18, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('rect', {x:9, y:9, width:13, height:13, rx:2, ry:2}), React.createElement('path', {d:"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"})),
+            Type: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('polyline', {points:"4 7 4 4 20 4 20 7"}), React.createElement('line', {x1:9, y1:20, x2:15, y2:20}), React.createElement('line', {x1:12, y1:4, x2:12, y2:20})),
+            Activity: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('polyline', {points:"22 12 18 12 15 21 9 3 6 12 2 12"})),
+            Zap: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('polygon', {points:"13 2 3 14 12 14 11 22 21 10 12 10 13 2"})),
+            Rotate: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M23 4v6h-6"}), React.createElement('path', {d:"M20.49 15a9 9 0 1 1-2.12-9.36L23 10"})),
+            Move: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('polyline', {points:"5 9 2 12 5 15"}), React.createElement('polyline', {points:"9 5 12 2 15 5"}), React.createElement('polyline', {points:"15 19 12 22 9 19"}), React.createElement('polyline', {points:"19 9 22 12 19 15"}), React.createElement('line', {x1:2, y1:12, x2:22, y2:12}), React.createElement('line', {x1:12, y1:2, x2:12, y2:22})),
+            Link: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"}), React.createElement('path', {d:"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"})),
+            Ruby: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M6 4h12"}), React.createElement('path', {d:"M12 4v4"}), React.createElement('path', {d:"M9 20h6"}), React.createElement('path', {d:"M12 10v10"})),
+            Flip: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M21.5 12H2.5"}), React.createElement('path', {d:"M21.5 5H2.5"}), React.createElement('path', {d:"M21.5 19H2.5"}), React.createElement('path', {d:"M7.5 5v14"}), React.createElement('path', {d:"M16.5 5v14"})),
+            Serif: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M4 19h6"}), React.createElement('path', {d:"M14 19h6"}), React.createElement('path', {d:"M12 19V5"}), React.createElement('path', {d:"M9 5h6"})),
+            EyeOff: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}), React.createElement('line', {x1:1, y1:1, x2:23, y2:23})),
+            Palette: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('circle', {cx:13.5, cy:6.5, r:2.5}), React.createElement('circle', {cx:17.5, cy:10.5, r:2.5}), React.createElement('circle', {cx:8.5, cy:7.5, r:2.5}), React.createElement('circle', {cx:6.5, cy:12.5, r:2.5}), React.createElement('path', {d:"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"})),
+            Maximize: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('polyline', {points:"15 3 21 3 21 9"}), React.createElement('polyline', {points:"9 21 3 21 3 15"}), React.createElement('line', {x1:21, y1:3, x2:14, y2:10}), React.createElement('line', {x1:3, y1:21, x2:10, y2:14})),
+            Sparkles: () => React.createElement('svg', {width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2}, React.createElement('path', {d:"m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"}), React.createElement('path', {d:"M5 3v4"}), React.createElement('path', {d:"M9 5H5"}), React.createElement('path', {d:"M19 19v2"}), React.createElement('path', {d:"M21 20h-2"}))
+        };
+
+        // --- MFM Renderer ---
+        const MfmNodeRenderer = ({ node }) => {
+            if (node.type === 'text') return React.createElement('span', null, node.props.text);
+            
+            const children = node.children ? node.children.map((c, i) => React.createElement(MfmNodeRenderer, { key: i, node: c })) : null;
+
+            // Helper to fix colors (e.g. "f00" -> "#f00")
+            const fixColor = (c) => {
+                if (!c) return undefined;
+                // If it looks like a hex code but missing #, add it
+                if (/^[0-9a-fA-F]{3,4}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/.test(c)) {
+                    return '#' + c;
+                }
+                return c;
+            };
+
+            switch (node.type) {
+                case 'bold': return React.createElement('span', { className: "font-bold" }, children);
+                case 'small': return React.createElement('span', { className: "text-xs opacity-80" }, children);
+                case 'center': return React.createElement('div', { className: "text-center w-full block" }, children);
+                case 'url':
+                case 'link': return React.createElement('a', { href: node.props.url, className: "text-blue-500 underline pointer-events-none" }, children || node.props.url);
+                case 'fn': {
+                    const name = node.props.name;
+                    const args = node.props.args || {};
+                    let className = '';
+                    let style = {};
+
+                    if (name === 'shake') className = 'mfm-shake';
+                    if (name === 'jelly') className = 'mfm-jelly';
+                    if (name === 'tada') className = 'mfm-tada';
+                    if (name === 'spin') className = 'mfm-spin';
+                    if (name === 'jump') className = 'mfm-jump';
+                    if (name === 'rainbow') className = 'mfm-rainbow';
+                    if (name === 'blur') className = 'mfm-blur';
+                    if (name === 'sparkle') className = 'mfm-sparkle';
+                    
+                    if (name === 'x2') className = 'mfm-x2';
+                    if (name === 'x3') className = 'mfm-x3';
+                    if (name === 'x4') className = 'mfm-x4';
+
+                    if (name === 'fg') style.color = fixColor(args.color);
+                    if (name === 'bg') style.backgroundColor = fixColor(args.color);
+
+                    if (name === 'flip') {
+                        if (args.h && args.v) className = 'mfm-flip-hv';
+                        else if (args.v) className = 'mfm-flip-v';
+                        else className = 'mfm-flip-h';
+                    }
+                    if (name === 'font' && args.serif) className = 'mfm-serif';
+                    if (name === 'ruby') {
+                        const rawText = node.children.map(c => c.props.text).join('');
+                        const parts = rawText.split(' ');
+                        return React.createElement('ruby', { className: "mx-1" }, parts[0] || '', React.createElement('rt', { className: "text-[0.6em] select-none" }, parts[1] || ''));
+                    }
+                    return React.createElement('span', { className, style }, children);
+                }
+                default: return children ? React.createElement(React.Fragment, null, children) : null;
+            }
+        };
+
+        const MfmRenderer = ({ text }) => {
+            const nodes = useMemo(() => Mfm.parse(text), [text]);
+            return React.createElement('div', { className: "break-words whitespace-pre-wrap leading-relaxed" },
+                nodes.map((node, i) => React.createElement(MfmNodeRenderer, { key: i, node }))
+            );
+        };
+
+        // --- Tool Button ---
+        const ToolButton = ({ onClick, icon, label, color, disabled, textLabel }) => {
+            return React.createElement('button', {
+                onClick: onClick,
+                disabled: disabled,
+                className: `flex flex-col items-center justify-center p-2 rounded transition-colors group min-w-[3rem] ${disabled ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-dark-surface'}`,
+                title: label
+            },
+                icon ? React.createElement(icon, { className: `mb-1 ${color || "text-gray-600 dark:text-gray-300"}` }) : React.createElement('span', { className: "mb-1 text-lg font-bold text-gray-500" }, textLabel),
+                React.createElement('span', { className: "text-[10px] text-gray-500 dark:text-gray-400 font-medium" }, label)
+            );
+        };
+
+        // --- Main App ---
+        function App() {
+            const initialText = '$[x2 $[sparkle キラキラ]] $[x3 拡大] $[x4 デカッ！]\n\n$[bg.color=ffff00 $[fg.color=f00 赤文字・黄背景]]\n\n$[blur ネタバレ注意]';
+            const [history, setHistory] = useState([initialText]);
+            const [historyIndex, setHistoryIndex] = useState(0);
+            const [isDark, setIsDark] = useState(false);
+            const [copied, setCopied] = useState(false);
+            
+            const textareaRef = useRef(null);
+            const colorInputRef = useRef(null);
+            const colorTargetRef = useRef('fg');
+
+            const text = history[historyIndex];
+
+            useEffect(() => {
+                if (isDark) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+            }, [isDark]);
+
+            // Native Event Listener for Color Input to avoid React's drag-spam
+            useEffect(() => {
+                const el = colorInputRef.current;
+                if (!el) return;
+
+                const handleNativeChange = (e) => {
+                    const color = e.target.value;
+                    const target = colorTargetRef.current;
+                    insertColorTag(color, target);
+                };
+
+                el.addEventListener('change', handleNativeChange);
+                return () => el.removeEventListener('change', handleNativeChange);
+            }, [history, historyIndex]);
+
+            const updateText = (newText) => {
+                const nextHistory = [...history.slice(0, historyIndex + 1), newText];
+                setHistory(nextHistory);
+                setHistoryIndex(nextHistory.length - 1);
+            };
+
+            const undo = () => { if (historyIndex > 0) setHistoryIndex(historyIndex - 1); };
+            const redo = () => { if (historyIndex < history.length - 1) setHistoryIndex(historyIndex + 1); };
+
+            const insertTag = (prefix, suffix = ']') => {
+                const textarea = textareaRef.current;
+                if (!textarea) return;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const selectedText = text.substring(start, end);
+                const before = text.substring(0, start);
+                const after = text.substring(end);
+                const newText = `${before}${prefix}${selectedText}${suffix}${after}`;
+                updateText(newText);
+                setTimeout(() => {
+                    textarea.focus();
+                    textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+                }, 0);
+            };
+
+            const insertColorTag = (color, target) => {
+                const textarea = textareaRef.current;
+                if (!textarea) return;
+                
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const currentText = textarea.value;
+                const selectedText = currentText.substring(start, end);
+                const before = currentText.substring(0, start);
+                const after = currentText.substring(end);
+
+                // Remove hash from the color
+                const cleanColor = color.replace('#', '');
+                
+                const prefix = target === 'fg' ? `$[fg.color=${cleanColor} ` : `$[bg.color=${cleanColor} `;
+                const suffix = ']';
+                
+                const newText = `${before}${prefix}${selectedText}${suffix}${after}`;
+                updateText(newText);
+            };
+
+            const openColorPicker = (target) => {
+                colorTargetRef.current = target;
+                if (colorInputRef.current) colorInputRef.current.click();
+            };
+
+            const insertRuby = () => {
+                const textarea = textareaRef.current;
+                if (!textarea) return;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const selectedText = text.substring(start, end);
+                const insertStr = selectedText ? `$[ruby ${selectedText} ふりがな]` : `$[ruby 文字 ふりがな]`;
+                const before = text.substring(0, start);
+                const after = text.substring(end);
+                updateText(`${before}${insertStr}${after}`);
+            };
+
+            const insertLink = () => {
+                const url = prompt('URLを入力してください:');
+                if (url) insertTag('[', `](${url})`);
+            };
+
+            const handleCopy = () => {
+                navigator.clipboard.writeText(text);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+
+            return React.createElement('div', { className: "min-h-screen flex flex-col" },
+                React.createElement('input', {
+                    type: 'color',
+                    ref: colorInputRef,
+                    style: { display: 'none' }
+                }),
+
+                // Header
+                React.createElement('header', { className: "px-6 py-3 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10" },
+                    React.createElement('div', { className: "flex items-center justify-between mb-2" },
+                        React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement('div', { className: "w-8 h-8 bg-neon rounded-lg flex items-center justify-center" },
+                                React.createElement('span', { className: "font-bold text-black" }, "M")
+                            ),
+                            React.createElement('h1', { className: "font-bold text-xl text-gray-800 dark:text-white" }, "MFMエディタ")
+                        ),
+                        React.createElement('div', { className: "flex items-center gap-4" },
+                            React.createElement('button', {
+                                onClick: () => setIsDark(!isDark),
+                                className: "p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300"
+                            }, isDark ? React.createElement(Icons.Moon) : React.createElement(Icons.Sun)),
+                            
+                            React.createElement('button', {
+                                onClick: handleCopy,
+                                className: "flex items-center gap-2 bg-neon hover:opacity-90 text-black px-4 py-2 rounded-lg font-bold transition-all shadow-lg shadow-neon/20 active:scale-95"
+                            }, 
+                                React.createElement(Icons.Copy),
+                                React.createElement('span', null, copied ? "コピー完了!" : "コピーする")
+                            )
+                        )
+                    ),
+                    React.createElement('div', { className: "text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1" },
+                        React.createElement(Icons.EyeOff, { width: 14, height: 14 }),
+                        React.createElement('span', null, "大きいものや、動くMFM、警告が出た際などは、CW…つまりは👁のアイコンの「内容を隠す」を使いましょう")
+                    )
+                ),
+                
+                // Main
+                React.createElement('main', { className: "flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-88px)]" },
+                    
+                    // Editor
+                    React.createElement('div', { className: "flex flex-col bg-white dark:bg-dark-surface rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden" },
+                        React.createElement('div', { className: "p-2 border-b border-gray-100 dark:border-gray-800 flex flex-wrap gap-1 bg-gray-50/50 dark:bg-dark-surface overflow-y-auto max-h-[140px]" },
+                            React.createElement(ToolButton, { icon: Icons.Undo, label: "戻す", onClick: undo, disabled: historyIndex === 0 }),
+                            React.createElement(ToolButton, { icon: Icons.Redo, label: "やり直し", onClick: redo, disabled: historyIndex === history.length - 1 }),
+                            React.createElement('div', { className: "w-px h-8 bg-gray-300 dark:bg-gray-700 mx-1" }),
+                            React.createElement(ToolButton, { icon: Icons.Type, label: "太字", onClick: () => insertTag('**', '**') }),
+                            React.createElement(ToolButton, { icon: Icons.Serif, label: "明朝", onClick: () => insertTag('$[font.serif ', ']') }),
+                            React.createElement(ToolButton, { icon: Icons.Ruby, label: "ルビ", onClick: insertRuby }),
+                            React.createElement(ToolButton, { textLabel: "x2", label: "大", onClick: () => insertTag('$[x2 ', ']') }),
+                            React.createElement(ToolButton, { textLabel: "x3", label: "特大", onClick: () => insertTag('$[x3 ', ']') }),
+                            React.createElement(ToolButton, { textLabel: "x4", label: "最大", onClick: () => insertTag('$[x4 ', ']') }),
+                            React.createElement('div', { className: "w-px h-8 bg-gray-300 dark:bg-gray-700 mx-1" }),
+                            React.createElement(ToolButton, { icon: Icons.Palette, label: "文字色", onClick: () => openColorPicker('fg'), color: "text-red-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Palette, label: "背景色", onClick: () => openColorPicker('bg'), color: "text-yellow-500" }),
+                            React.createElement(ToolButton, { icon: Icons.EyeOff, label: "ぼかし", onClick: () => insertTag('$[blur ', ']') }),
+                            React.createElement('div', { className: "w-px h-8 bg-gray-300 dark:bg-gray-700 mx-1" }),
+                            React.createElement(ToolButton, { icon: Icons.Sparkles, label: "キラキラ", onClick: () => insertTag('$[sparkle ', ']'), color: "text-yellow-400" }),
+                            React.createElement(ToolButton, { icon: Icons.Activity, label: "震える", onClick: () => insertTag('$[shake ', ']'), color: "text-red-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Flip, label: "反転", onClick: () => insertTag('$[flip ', ']'), color: "text-indigo-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Zap, label: "ぷるぷる", onClick: () => insertTag('$[jelly ', ']'), color: "text-orange-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Move, label: "跳ねる", onClick: () => insertTag('$[jump ', ']'), color: "text-green-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Rotate, label: "回転", onClick: () => insertTag('$[spin ', ']'), color: "text-blue-500" }),
+                            React.createElement(ToolButton, { icon: Icons.Zap, label: "虹色", onClick: () => insertTag('$[rainbow ', ']'), color: "text-purple-500" }),
+                            React.createElement('div', { className: "w-px h-8 bg-gray-300 dark:bg-gray-700 mx-1" }),
+                            React.createElement(ToolButton, { icon: Icons.Activity, label: "中央", onClick: () => insertTag('\n<center>\n', '\n</center>\n') }),
+                            React.createElement(ToolButton, { icon: Icons.Link, label: "リンク", onClick: insertLink })
+                        ),
+                        React.createElement('textarea', {
+                            ref: textareaRef,
+                            value: text,
+                            onChange: (e) => updateText(e.target.value),
+                            className: "flex-1 p-4 resize-none focus:outline-none bg-transparent text-gray-800 dark:text-gray-100 font-mono text-sm leading-relaxed",
+                            placeholder: "ここにMFMテキストを入力してください..."
+                        })
+                    ),
+                    
+                    // Preview
+                    React.createElement('div', { className: "flex flex-col bg-white dark:bg-dark-surface rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden" },
+                        React.createElement('div', { className: "h-10 border-b border-gray-100 dark:border-gray-800 flex items-center px-4 bg-gray-50/50 dark:bg-dark-surface" },
+                            React.createElement('span', { className: "text-xs font-bold text-gray-400 uppercase tracking-wider" }, "プレビュー")
+                        ),
+                        React.createElement('div', { className: "flex-1 p-6 overflow-y-auto bg-white dark:bg-dark-surface text-gray-800 dark:text-gray-100" },
+                            React.createElement(MfmRenderer, { text: text })
+                        )
+                    )
+                )
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
