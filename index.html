@@ -1,16 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-M12MLNFCNP"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-    
-      gtag('config', 'G-M12MLNFCNP');
-    </script>
-    <title>Misskey MFMエディター</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Misskey MFMエディタ | リアルタイムプレビュー＆入力支援</title>
@@ -34,9 +24,9 @@
     <meta name="apple-mobile-web-app-title" content="MFM Editor">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -363,7 +353,13 @@
                             React.createElement('div', { className: "w-8 h-8 bg-neon rounded-lg flex items-center justify-center" },
                                 React.createElement('span', { className: "font-bold text-black" }, "M")
                             ),
-                            React.createElement('h1', { className: "font-bold text-xl text-gray-800 dark:text-white" }, "MFMエディタ")
+                            React.createElement('h1', { className: "font-bold text-xl text-gray-800 dark:text-white" }, "MFMエディタ"),
+                            React.createElement('a', { 
+                                href: "https://misskey.io/@kuro_kuro_kuroi", 
+                                target: "_blank", 
+                                rel: "noopener noreferrer",
+                                className: "ml-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                            }, "不具合報告はこちら")
                         ),
                         React.createElement('div', { className: "flex items-center gap-4" },
                             React.createElement('button', {
@@ -382,7 +378,7 @@
                     ),
                     React.createElement('div', { className: "text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1" },
                         React.createElement(Icons.EyeOff, { width: 14, height: 14 }),
-                        React.createElement('span', null, "大きいものや、動くMFM、警告が出た際などは、CW…つまりは👁のアイコンの「内容を隠す」を使いましょう。あくまで通常の投稿時のMFM支援ツールです。MFM芸には向いてません")
+                        React.createElement('span', null, "大きいものや、動くMFM、警告が出た際などは、CW…つまりは👁のアイコンの「内容を隠す」を使いましょう")
                     )
                 ),
                 
